@@ -1,0 +1,31 @@
+import { useEffect, useState } from 'react';
+import { AlertTriangle, Pencil, PiggyBank, Trash2 } from 'lucide-react';
+import { apiRequest, formatCurrency, getUserErrorMessage, localDateInputValue } from '../services/api';
+
+const blank = () => { const today = new Date(); return { category: '', amount: '', period: 'MONTHLY', startDate: localDateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)), endDate: localDateInputValue(new Date(today.getFullYear(), today.getMonth() + 1, 0)) }; };
+
+export default function BudgetsPage() {
+  const [budgets, setBudgets] = useState([]); const [categories, setCategories] = useState([]);
+  const [form, setForm] = useState(blank); const [editingId, setEditingId] = useState(null);
+  const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(''); const [success, setSuccess] = useState('');
+  async function load() { try { setLoading(true); const [b, c] = await Promise.all([apiRequest('/budgets'), apiRequest('/categories')]); setBudgets(b || []); setCategories((c || []).filter(x => x.type === 'EXPENSE')); setError(''); } catch(e) { setError(getUserErrorMessage(e)); } finally { setLoading(false); } }
+  useEffect(() => { load(); }, []);
+  async function submit(e) { e.preventDefault(); setSaving(true); setError(''); setSuccess(''); try { await apiRequest(editingId ? `/budgets/${editingId}` : '/budgets', { method: editingId ? 'PUT' : 'POST', body: JSON.stringify({ ...form, amount: Number(form.amount) }) }); setEditingId(null); setForm(blank()); setSuccess(editingId ? 'Budget updated.' : 'Budget created.'); window.dispatchEvent(new Event('finsight:dashboard:refresh')); await load(); } catch(err) { setError(getUserErrorMessage(err)); } finally { setSaving(false); } }
+  async function remove(b) { if (!window.confirm(`Delete the ${b.category} budget?`)) return; try { await apiRequest(`/budgets/${b.id}`, { method: 'DELETE' }); setSuccess('Budget deleted.'); window.dispatchEvent(new Event('finsight:dashboard:refresh')); await load(); } catch(e) { setError(getUserErrorMessage(e)); } }
+  function edit(b) { setEditingId(b.id); setForm({ category: b.category, amount: String(b.amount), period: b.period, startDate: b.startDate, endDate: b.endDate }); setSuccess(''); }
+  return <div className="page-stack">
+    <section className="panel-card"><div className="panel-header"><div><p className="eyebrow">BUDGET MANAGEMENT</p><h3>{editingId ? 'Edit budget' : 'Create a budget'}</h3></div></div>
+      {categories.length === 0 && !loading && <p className="muted">Create an expense category before setting a budget.</p>}
+      <form className="transaction-form" onSubmit={submit}><div className="form-grid">
+        <label><span>Expense category</span><select required value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}><option value="">Choose a category</option>{categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select></label>
+        <label><span>Amount</span><input type="number" min="0.01" step="0.01" required value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })}/></label>
+        <label><span>Period</span><select value={form.period} onChange={e => setForm({ ...form, period: e.target.value })}><option value="MONTHLY">Monthly</option><option value="WEEKLY">Weekly</option><option value="YEARLY">Yearly</option><option value="CUSTOM">Custom</option></select></label>
+        <label><span>Start date</span><input type="date" required value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })}/></label><label><span>End date</span><input type="date" min={form.startDate} required value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })}/></label>
+      </div><div className="inline-actions"><button className="primary-button" disabled={saving || categories.length === 0}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Create budget'}</button>{editingId && <button type="button" className="secondary-button small" onClick={() => {setEditingId(null); setForm(blank());}}>Cancel</button>}</div></form>
+      {success && <div className="success-panel" role="status">{success}</div>}{error && <div className="error-panel" role="alert">{error}</div>}
+    </section>
+    <section className="panel-card"><div className="panel-header"><div><p className="eyebrow">BUDGET VIEW</p><h3>Budget health</h3></div></div>
+      {loading ? <div className="loading-card">Loading budgets…</div> : budgets.length === 0 ? <div className="empty-card"><PiggyBank size={22}/><h4>No budgets created</h4><p>Set a budget to track actual spending against your plan.</p></div> : <div className="budget-grid">{budgets.map(b => { const spent = Number(b.spent || 0); const amount = Number(b.amount || 0); const pct = Number(b.percentageUsed ?? (amount ? spent / amount * 100 : 0)); const over = b.status === 'EXCEEDED' || spent > amount; const warning = b.status === 'WARNING'; return <article className={`budget-card ${over ? 'over' : ''}`} key={b.id}><div className="budget-header"><div><span className="eyebrow">{b.category} · {b.period}</span><h4>{formatCurrency(amount)}</h4><small>{b.startDate} – {b.endDate}</small></div><span className={`pill ${over ? 'expense' : 'income'} ${warning ? 'warning' : ''}`}>{over ? 'Exceeded' : warning ? 'Warning' : 'Safe'}</span></div><div className="budget-metrics"><div><small>Spent</small><strong>{formatCurrency(spent)}</strong></div><div><small>Remaining</small><strong>{formatCurrency(b.remaining)}</strong></div></div><div className="progress-track large"><div className={`progress-fill ${over ? 'over' : ''} ${warning ? 'warning' : ''}`} style={{ width: `${Math.min(100, pct)}%` }}/></div><div className="budget-footer"><span>{pct.toFixed(1)}% used</span>{over && <strong className="over-budget"><AlertTriangle size={14}/> Over by {formatCurrency(spent - amount)}</strong>}</div><div className="inline-actions"><button className="secondary-button small" onClick={() => edit(b)}><Pencil size={15}/> Edit</button><button className="icon-button danger" onClick={() => remove(b)} aria-label="Delete budget"><Trash2 size={16}/></button></div></article>; })}</div>}
+    </section>
+  </div>;
+}
