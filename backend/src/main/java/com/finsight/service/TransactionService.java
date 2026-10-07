@@ -189,11 +189,17 @@ public class TransactionService {
             if (source.getId().equals(target.getId())) {
                 throw new IllegalArgumentException("Transfer source and destination cannot be the same");
             }
+            if (!source.getCurrency().equalsIgnoreCase(target.getCurrency())) {
+                throw new IllegalArgumentException("Transfers between different currencies are not supported");
+            }
+            validateCurrency(request.currency(), source.getCurrency());
             transaction.setAccount(source);
             transaction.setSourceAccount(source);
             transaction.setTargetAccount(target);
         } else {
-            transaction.setAccount(resolveOwnedAccount(user, request.accountId()));
+            Account account = resolveOwnedAccount(user, request.accountId());
+            validateCurrency(request.currency(), account.getCurrency());
+            transaction.setAccount(account);
             transaction.setSourceAccount(null);
             transaction.setTargetAccount(null);
         }
@@ -202,6 +208,14 @@ public class TransactionService {
         transaction.setDescription(request.description().trim());
         transaction.setTransactionDate(request.transactionDate());
         transaction.setNotes(request.notes() == null ? null : request.notes().trim());
-        transaction.setCurrency((request.currency() == null ? user.getCurrency() : request.currency().trim().toUpperCase()));
+        transaction.setCurrency(request.currency() == null
+                ? (request.type() == TransactionType.TRANSFER ? transaction.getSourceAccount().getCurrency() : transaction.getAccount().getCurrency())
+                : request.currency().trim().toUpperCase());
+    }
+
+    private void validateCurrency(String requestedCurrency, String accountCurrency) {
+        if (requestedCurrency != null && !requestedCurrency.trim().equalsIgnoreCase(accountCurrency)) {
+            throw new IllegalArgumentException("Transaction currency must match the account currency (" + accountCurrency + ")");
+        }
     }
 }

@@ -1,6 +1,6 @@
 # ==========================================
 # FinSight - Git Ignore
-# React + Spring Boot + MySQL
+# React + Spring Boot + PostgreSQL
 # ==========================================
 
 # ---------- Environment / Secrets ----------
@@ -8,7 +8,7 @@
 .env.*
 !.env.example
 
-# Spring local/prod configuration
+# Spring local / production configuration
 application-local.properties
 application-local.yml
 application-prod.properties
@@ -29,7 +29,7 @@ target/
 *.war
 *.ear
 
-# Maven
+.m2/
 .mvn/timing.properties
 
 # ---------- Spring Boot ----------
@@ -42,6 +42,7 @@ build/
 .vite/
 .parcel-cache/
 .npm/
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -53,7 +54,7 @@ pnpm-debug.log*
 *.iws
 *.ipr
 
-.vscode/
+.vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
 
@@ -95,7 +96,6 @@ surefire-reports/
 failsafe-reports/
 
 # ---------- Database ----------
-
 *.sql.gz
 *.dump
 *.bak
@@ -120,11 +120,3 @@ docker-compose.override.yml
 *.backup
 *.old
 *.orig
-
-# ---------- Java / Maven ----------
-.m2/
-target/
-*.class
-*.jar
-*.war
-*.ear

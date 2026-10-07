@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 public record DashboardResponse(
+        String currency,
         BigDecimal currentBalance,
         BigDecimal totalIncome,
         BigDecimal totalExpenses,

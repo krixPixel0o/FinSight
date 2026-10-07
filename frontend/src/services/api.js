@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8081/API';
+const API_BASE = `${import.meta.env.VITE_API_BASE_URL || ''}/API`;
 
 export function getToken() {
   return localStorage.getItem('finsight_token');
@@ -96,20 +96,20 @@ export async function apiRequest(path, options = {}) {
   return response.text();
 }
 
-export function formatCurrency(value) {
+export function formatCurrency(value, currency = localStorage.getItem('finsight_currency') || 'INR') {
   const numeric = Number(value || 0);
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: 'INR',
+    currency,
     maximumFractionDigits: numeric >= 1000 ? 0 : 2
   }).format(numeric);
 }
 
-export function formatCompactCurrency(value) {
+export function formatCompactCurrency(value, currency = localStorage.getItem('finsight_currency') || 'INR') {
   const numeric = Number(value || 0);
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: 'INR',
+    currency,
     notation: 'compact',
     maximumFractionDigits: 1
   }).format(numeric);

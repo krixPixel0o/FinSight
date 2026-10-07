@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Landmark, Pencil, Trash2, Wallet } from 'lucide-react';
 import { apiRequest, getUserErrorMessage } from '../services/api';
 
-const blank = { name: '', type: 'BANK', currency: 'INR', openingBalance: '0', active: true };
+const blank = () => ({ name: '', type: 'BANK', currency: localStorage.getItem('finsight_currency') || 'INR', openingBalance: '0', active: true });
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState([]);
@@ -25,7 +25,7 @@ export default function AccountsPage() {
     try {
       const body = { ...form, name: form.name.trim(), currency: form.currency.trim().toUpperCase(), openingBalance: Number(form.openingBalance) };
       await apiRequest(editingId ? `/accounts/${editingId}` : '/accounts', { method: editingId ? 'PUT' : 'POST', body: JSON.stringify(body) });
-      setForm(blank); setEditingId(null); setSuccess(editingId ? 'Account updated.' : 'Account created.');
+      setForm(blank()); setEditingId(null); setSuccess(editingId ? 'Account updated.' : 'Account created.');
       window.dispatchEvent(new Event('finsight:accounts:refresh'));
       await loadAccounts();
     } catch (e) { setError(getUserErrorMessage(e)); }
@@ -51,10 +51,10 @@ export default function AccountsPage() {
           <label><span>Name</span><input value={form.name} maxLength="80" required minLength="2" onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Main savings" /></label>
           <label><span>Type</span><select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}><option value="SAVINGS">Savings</option><option value="CURRENT">Current</option><option value="BANK">Bank</option><option value="CASH">Cash</option><option value="CREDIT_CARD">Credit card</option><option value="WALLET">Wallet</option><option value="INVESTMENT">Investment</option><option value="OTHER">Other</option></select></label>
           <label><span>Opening balance</span><input type="number" min="0" step="0.01" required value={form.openingBalance} onChange={e => setForm({ ...form, openingBalance: e.target.value })} /></label>
-          <label><span>Currency</span><input value={form.currency} maxLength="3" minLength="3" pattern="[A-Za-z]{3}" required onChange={e => setForm({ ...form, currency: e.target.value })} /></label>
+          <label><span>Currency (profile-wide)</span><input value={form.currency} maxLength="3" minLength="3" pattern="[A-Za-z]{3}" required readOnly /><small>All accounts use your preferred currency.</small></label>
         </div>
         <label className="checkbox-label"><input type="checkbox" checked={form.active} onChange={e => setForm({ ...form, active: e.target.checked })} /> Available for transactions</label>
-        <div className="inline-actions"><button className="primary-button" disabled={saving}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Create account'}</button>{editingId && <button type="button" className="secondary-button small" onClick={() => { setEditingId(null); setForm(blank); }}>Cancel</button>}</div>
+        <div className="inline-actions"><button className="primary-button" disabled={saving}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Create account'}</button>{editingId && <button type="button" className="secondary-button small" onClick={() => { setEditingId(null); setForm(blank()); }}>Cancel</button>}</div>
       </form>
       {success && <div className="success-panel" role="status">{success}</div>}{error && <div className="error-panel" role="alert">{error}</div>}
     </section>

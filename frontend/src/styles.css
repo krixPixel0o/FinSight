@@ -670,7 +670,7 @@ h1, h2, h3, h4, p {
 .mini-chart {
   height: 180px;
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   align-items: end;
   gap: 0.8rem;
   padding: 1rem 0 0.3rem;
@@ -686,16 +686,26 @@ h1, h2, h3, h4, p {
   width: 100%;
   border-radius: 12px 12px 0 0;
   background: linear-gradient(180deg, rgba(125, 184, 162, 0.95) 0%, var(--primary) 100%);
-  min-height: 18px;
+  min-height: 0;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
 }
 
 .chart-labels {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   font-size: 0.78rem;
   color: var(--muted);
   text-align: center;
+}
+
+.chart-labels span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.chart-labels small {
+  color: var(--muted);
 }
 
 .category-list,
@@ -1264,6 +1274,45 @@ h1, h2, h3, h4, .brand-mark, .metric-card strong {
 .transaction-icon.income { background: color-mix(in srgb, var(--success) 12%, var(--panel)); }
 .transaction-icon.expense { background: color-mix(in srgb, var(--danger) 11%, var(--panel)); }
 .insight-item, .smart-summary > div { background: var(--panel-alt); }
+
+.health-score-card { display: grid; gap: 1rem; }
+.health-score-total { display: grid; grid-template-columns: auto auto; column-gap: 0.25rem; align-items: baseline; justify-content: end; }
+.health-score-total strong { font-size: 2rem; letter-spacing: -0.06em; }
+.health-score-total > span { color: var(--muted); }
+.health-score-total small { grid-column: 1 / -1; text-align: right; text-transform: capitalize; color: var(--muted); }
+.health-score-components { display: grid; gap: 1rem; }
+.health-score-component { display: grid; gap: 0.45rem; padding: 0.9rem; border-radius: 0.9rem; background: var(--panel-alt); }
+.health-score-component-heading { display: flex; justify-content: space-between; gap: 1rem; }
+.health-score-component-heading span, .health-score-component small, .health-score-period { color: var(--muted); }
+.health-score-component p { margin: 0; color: var(--muted); font-size: 0.88rem; line-height: 1.5; }
+.health-score-note { margin: 0; padding: 0.8rem 0.9rem; border-radius: 0.8rem; background: var(--panel-alt); color: var(--muted); line-height: 1.5; }
+.health-score-period { display: block; }
+.anomaly-list { display: grid; gap: 0.8rem; }
+.anomaly-item { display: grid; gap: 0.5rem; padding: 1rem; border: 1px solid var(--border); border-radius: 0.9rem; background: var(--panel-alt); }
+.anomaly-item-heading { display: flex; justify-content: space-between; gap: 1rem; }
+.anomaly-item-heading > div { display: grid; gap: 0.25rem; }
+.anomaly-item-heading small, .anomaly-item > small, .anomaly-item p { color: var(--muted); }
+.anomaly-item p { margin: 0; line-height: 1.5; }
+.forecast-projections { display: grid; gap: 0.55rem; }
+.forecast-projection { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.75rem; padding: 0.8rem 0.9rem; border-radius: 0.8rem; background: var(--panel-alt); }
+.forecast-projection span, .forecast-assumptions { color: var(--muted); }
+.forecast-assumptions { margin: 0; padding-left: 1.25rem; font-size: 0.84rem; line-height: 1.55; }
+.scenario-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem; }
+.scenario-form label { display: grid; gap: 0.4rem; }
+.scenario-form label span { font-size: 0.82rem; font-weight: 650; }
+.scenario-form .assistant-consent { grid-column: 1 / -1; grid-template-columns: auto 1fr; align-items: start; }
+.scenario-form .assistant-consent input { margin-top: 0.2rem; }
+.scenario-form textarea { min-width: 0; resize: vertical; }
+.scenario-form input, .scenario-form select { min-width: 0; }
+.scenario-result { display: grid; gap: 0.75rem; padding: 1rem; border-radius: 0.9rem; background: var(--panel-alt); }
+.scenario-result > div { display: flex; justify-content: space-between; gap: 1rem; }
+.scenario-result small { color: var(--muted); }
+.planning-actions { display: flex; flex-wrap: wrap; gap: 0.55rem; }
+@media (max-width: 600px) { .scenario-form { grid-template-columns: 1fr; } }
+
+@media (max-width: 600px) {
+  .health-score-component-heading { align-items: flex-start; flex-direction: column; gap: 0.2rem; }
+}
 .empty-card { background: var(--panel-alt); border-color: var(--line); }
 .budget-card, .category-tile { background: var(--panel); border-radius: 13px; }
 .budget-card.over { background: color-mix(in srgb, var(--danger) 5%, var(--panel)); }

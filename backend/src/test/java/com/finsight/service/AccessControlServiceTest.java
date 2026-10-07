@@ -1,6 +1,7 @@
 package com.finsight.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -16,9 +17,13 @@ import com.finsight.dto.AccountRequest;
 import com.finsight.dto.LoginRequest;
 import com.finsight.dto.RegisterRequest;
 import com.finsight.entity.AccountType;
+import com.finsight.entity.FinanceTransaction;
+import com.finsight.entity.TransactionType;
 import com.finsight.entity.User;
 import com.finsight.exception.ResourceNotFoundException;
+import com.finsight.exception.ConflictException;
 import com.finsight.repository.AccountRepository;
+import com.finsight.repository.TransactionRepository;
 import com.finsight.repository.UserRepository;
 
 @SpringBootTest
@@ -30,6 +35,7 @@ class AccessControlServiceTest {
     @Autowired private AccountService accountService;
     @Autowired private UserRepository userRepository;
     @Autowired private AccountRepository accountRepository;
+    @Autowired private TransactionRepository transactionRepository;
     @Autowired private PasswordEncoder passwordEncoder;
 
     @Test
@@ -41,13 +47,29 @@ class AccessControlServiceTest {
         authService.registerUser(request);
 
         LoginRequest loginRequest = new LoginRequest();
-        loginRequest.setEmail("alice@example.com");
+        loginRequest.setEmail("  ALICE@EXAMPLE.COM  ");
         loginRequest.setPwd("secret123");
 
         String token = authService.loginUser(loginRequest);
 
         assertTrue(token.contains("."));
         assertEquals(3, token.split("\\.").length);
+    }
+
+    @Test
+    void registrationTreatsEmailAddressesAsCaseInsensitive() {
+        RegisterRequest first = new RegisterRequest();
+        first.setName("Alice");
+        first.setEmail("Alice@Example.com");
+        first.setPassword("secret123");
+        authService.registerUser(first);
+
+        RegisterRequest duplicate = new RegisterRequest();
+        duplicate.setName("Another Alice");
+        duplicate.setEmail("alice@example.com");
+        duplicate.setPassword("secret123");
+
+        assertThrows(ConflictException.class, () -> authService.registerUser(duplicate));
     }
 
     @Test
@@ -80,5 +102,43 @@ class AccessControlServiceTest {
                 () -> accountService.update("alice@example.com", accountB.id(), request));
         assertThrows(ResourceNotFoundException.class,
                 () -> accountService.delete("alice@example.com", accountB.id()));
+    }
+
+    @Test
+    void accountOpeningBalanceCannotBeRewrittenAfterTransactionsExist() {
+        User user = new User("Alice", "alice@example.com", passwordEncoder.encode("secret123"));
+        userRepository.save(user);
+        var account = accountService.create("alice@example.com",
+                new AccountRequest("Checking", AccountType.BANK, "INR", new BigDecimal("1000.00"), true));
+
+        FinanceTransaction transaction = new FinanceTransaction();
+        transaction.setUser(user);
+        transaction.setAccount(accountRepository.findById(account.id()).orElseThrow());
+        transaction.setType(TransactionType.INCOME);
+        transaction.setAmount(new BigDecimal("100.00"));
+        transaction.setCategory("Salary");
+        transaction.setDescription("Pay");
+        transaction.setCurrency("INR");
+        transaction.setTransactionDate(LocalDate.now());
+        transactionRepository.save(transaction);
+
+        AccountRequest rewriteOpeningBalance = new AccountRequest("Checking", AccountType.BANK,
+                "INR", new BigDecimal("5000.00"), true);
+        assertThrows(ConflictException.class,
+                () -> accountService.update("alice@example.com", account.id(), rewriteOpeningBalance));
+    }
+
+    @Test
+    void accountCurrencyDefaultsToUsersPreferredCurrencyOnCreateAndUpdate() {
+        User user = new User("Taylor", "currency-owner@example.com", passwordEncoder.encode("secret123"));
+        user.setCurrency("USD");
+        userRepository.save(user);
+
+        AccountRequest omittedCurrency = new AccountRequest("Daily", AccountType.BANK, null, BigDecimal.ZERO, true);
+        var created = accountService.create(user.getEmail(), omittedCurrency);
+        assertEquals("USD", created.currency());
+
+        var updated = accountService.update(user.getEmail(), created.id(), omittedCurrency);
+        assertEquals("USD", updated.currency());
     }
 }

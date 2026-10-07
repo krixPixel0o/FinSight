@@ -11,7 +11,8 @@ import {
   Settings,
   SunMedium,
   TrendingUp,
-  Wallet
+  Wallet,
+  Target
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest, clearToken, formatFullDate, getToken } from '../services/api';
@@ -49,6 +50,7 @@ const navigation = [
   { label: 'Budgets', path: '/app/budgets', icon: PiggyBank },
   { label: 'Categories', path: '/app/categories', icon: FolderKanban },
   { label: 'Insights', path: '/app/insights', icon: TrendingUp },
+  { label: 'Goals & liabilities', path: '/app/planning', icon: Target },
   { label: 'Reports', path: '/app/reports', icon: BarChart3 },
   { label: 'Settings/Profile', path: '/app/settings', icon: Settings },
 ];
@@ -74,6 +76,7 @@ export default function AppShell() {
       try {
         const profile = await apiRequest('/auth/me');
         setUser(profile);
+        if (profile.currency) localStorage.setItem('finsight_currency', profile.currency);
       } catch (error) {
         clearToken();
         navigate('/', { replace: true });

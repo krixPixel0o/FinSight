@@ -17,4 +17,5 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     List<Account> findByUserIdAndActiveTrueOrderByName(Long userId);
     Optional<Account> findFirstByUserIdAndActiveTrueOrderByNameAsc(Long userId);
     long countByUserIdAndType(Long userId, AccountType type);
+    long countByUserIdAndCurrencyNot(Long userId, String currency);
 }

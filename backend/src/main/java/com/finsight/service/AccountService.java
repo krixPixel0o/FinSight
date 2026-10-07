@@ -1,7 +1,9 @@
 package com.finsight.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,8 +12,6 @@ import com.finsight.dto.AccountRequest;
 import com.finsight.dto.AccountResponse;
 import com.finsight.entity.Account;
 import com.finsight.entity.User;
-import com.finsight.entity.FinanceTransaction;
-import com.finsight.entity.TransactionType;
 import com.finsight.exception.ConflictException;
 import com.finsight.exception.ResourceNotFoundException;
 import com.finsight.repository.AccountRepository;
@@ -24,33 +24,39 @@ public class AccountService {
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
     private final TransactionRepository transactionRepository;
+    private final AccountBalanceService accountBalanceService;
 
     public AccountService(AccountRepository accountRepository, UserRepository userRepository,
-                          TransactionRepository transactionRepository) {
+                          TransactionRepository transactionRepository, AccountBalanceService accountBalanceService) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.transactionRepository = transactionRepository;
+        this.accountBalanceService = accountBalanceService;
     }
 
     @Transactional(readOnly = true)
     public List<AccountResponse> findAll(String email) {
         User user = findUser(email);
-        List<FinanceTransaction> transactions = transactionRepository.findByUserIdOrderByTransactionDateDesc(user.getId());
-        return accountRepository.findByUserOrderByName(user).stream()
-                .map(account -> response(account, transactions))
+        List<Account> accounts = accountRepository.findByUserOrderByName(user);
+        Map<Long, BigDecimal> balances = accountBalanceService.balances(accounts, LocalDate.now());
+        return accounts.stream()
+                .map(account -> response(account, balances.getOrDefault(account.getId(), account.getOpeningBalance())))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public AccountResponse findById(String email, Long id) {
         User user = findUser(email);
-        return response(ownedAccount(user, id), transactionRepository.findByUserIdOrderByTransactionDateDesc(user.getId()));
+        Account account = ownedAccount(user, id);
+        BigDecimal balance = accountBalanceService.balances(List.of(account), LocalDate.now())
+                .getOrDefault(account.getId(), account.getOpeningBalance());
+        return response(account, balance);
     }
 
     @Transactional
     public AccountResponse create(String email, AccountRequest request) {
         User user = findUser(email);
-        validateRequest(request, null);
+        validateRequest(request, user);
         String normalizedName = request.name().trim();
         if (accountRepository.existsByUserAndNameIgnoreCase(user, normalizedName)) {
             throw new ConflictException("Account name already exists");
@@ -60,19 +66,30 @@ public class AccountService {
         account.setUser(user);
         account.setName(normalizedName);
         account.setType(request.type());
-        account.setCurrency(request.currency() == null ? "INR" : request.currency().trim().toUpperCase());
+        account.setCurrency(request.currency() == null ? user.getCurrency() : request.currency().trim().toUpperCase());
         account.setOpeningBalance(request.openingBalance() == null ? BigDecimal.ZERO : request.openingBalance());
         account.setActive(request.active());
 
         Account saved = accountRepository.save(account);
-        return response(saved, List.of());
+        return response(saved, saved.getOpeningBalance());
     }
 
     @Transactional
     public AccountResponse update(String email, Long id, AccountRequest request) {
         User user = findUser(email);
-        validateRequest(request, id);
+        validateRequest(request, user);
         Account account = ownedAccount(user, id);
+        boolean hasTransactions = transactionRepository.existsByUserAndAccount(user.getId(), account.getId());
+        BigDecimal requestedOpeningBalance = request.openingBalance() == null
+                ? BigDecimal.ZERO : request.openingBalance();
+        String requestedCurrency = request.currency() == null
+                ? user.getCurrency() : request.currency().trim().toUpperCase();
+        if (hasTransactions && account.getOpeningBalance().compareTo(requestedOpeningBalance) != 0) {
+            throw new ConflictException("Opening balance cannot change after transactions have been recorded");
+        }
+        if (hasTransactions && !account.getCurrency().equalsIgnoreCase(requestedCurrency)) {
+            throw new ConflictException("Account currency cannot change after transactions have been recorded");
+        }
         String normalizedName = request.name().trim();
         if (!account.getName().equalsIgnoreCase(normalizedName)
                 && accountRepository.existsByUserAndNameIgnoreCase(user, normalizedName)) {
@@ -81,11 +98,14 @@ public class AccountService {
 
         account.setName(normalizedName);
         account.setType(request.type());
-        account.setCurrency(request.currency() == null ? "INR" : request.currency().trim().toUpperCase());
+        account.setCurrency(request.currency() == null ? user.getCurrency() : request.currency().trim().toUpperCase());
         account.setOpeningBalance(request.openingBalance() == null ? BigDecimal.ZERO : request.openingBalance());
         account.setActive(request.active());
 
-        return response(accountRepository.save(account), transactionRepository.findByUserIdOrderByTransactionDateDesc(user.getId()));
+        Account saved = accountRepository.save(account);
+        BigDecimal balance = accountBalanceService.balances(List.of(saved), LocalDate.now())
+                .getOrDefault(saved.getId(), saved.getOpeningBalance());
+        return response(saved, balance);
     }
 
     @Transactional
@@ -113,7 +133,7 @@ public class AccountService {
                 });
     }
 
-    private void validateRequest(AccountRequest request, Long ignoredId) {
+    private void validateRequest(AccountRequest request, User user) {
         if (request == null) {
             throw new IllegalArgumentException("Account details are required");
         }
@@ -132,6 +152,10 @@ public class AccountService {
         if (request.currency() != null && !request.currency().matches("^[A-Z]{3}$")) {
             throw new IllegalArgumentException("Currency must be a valid ISO code");
         }
+        String currency = request.currency() == null ? user.getCurrency() : request.currency().trim().toUpperCase();
+        if (!currency.equalsIgnoreCase(user.getCurrency())) {
+            throw new IllegalArgumentException("Account currency must match your preferred currency (" + user.getCurrency() + ")");
+        }
     }
 
     private Account ownedAccount(User user, Long id) {
@@ -145,17 +169,7 @@ public class AccountService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }
 
-    private AccountResponse response(Account account, List<FinanceTransaction> transactions) {
-        BigDecimal balance = account.getOpeningBalance();
-        for (FinanceTransaction transaction : transactions) {
-            BigDecimal amount = transaction.getAmount();
-            if (transaction.getType() == TransactionType.TRANSFER) {
-                if (transaction.getSourceAccount() != null && transaction.getSourceAccount().getId().equals(account.getId())) balance = balance.subtract(amount);
-                if (transaction.getTargetAccount() != null && transaction.getTargetAccount().getId().equals(account.getId())) balance = balance.add(amount);
-            } else if (transaction.getAccount() != null && transaction.getAccount().getId().equals(account.getId())) {
-                balance = transaction.getType() == TransactionType.INCOME ? balance.add(amount) : balance.subtract(amount);
-            }
-        }
+    private AccountResponse response(Account account, BigDecimal balance) {
         return AccountResponse.from(account, balance);
     }
 }

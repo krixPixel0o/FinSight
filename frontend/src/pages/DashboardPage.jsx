@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Activity, ArrowDownLeft, ArrowUpRight, TrendingUp, Wallet } from 'lucide-react';
-import { apiRequest, formatCurrency, formatDate, formatPercent, getUserErrorMessage, localDateInputValue } from '../services/api';
+import { apiRequest, formatCompactCurrency, formatCurrency, formatDate, formatPercent, getUserErrorMessage, localDateInputValue } from '../services/api';
 
 const emptyState = {
+  currency: 'INR',
   currentBalance: 0,
   totalIncome: 0,
   totalExpenses: 0,
@@ -32,6 +34,8 @@ export default function DashboardPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [categories, setCategories] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [referenceDataError, setReferenceDataError] = useState('');
+  const [referenceDataLoading, setReferenceDataLoading] = useState(true);
 
   async function loadDashboard() {
     try {
@@ -46,15 +50,33 @@ export default function DashboardPage() {
     }
   }
 
+  async function loadReferenceData() {
+    setReferenceDataLoading(true);
+    const [categoryResult, accountResult] = await Promise.allSettled([
+      apiRequest('/categories'),
+      apiRequest('/accounts')
+    ]);
+
+    setCategories(categoryResult.status === 'fulfilled' ? categoryResult.value || [] : []);
+    setAccounts(accountResult.status === 'fulfilled'
+      ? (accountResult.value || []).filter((account) => account.active)
+      : []);
+    const unavailable = [];
+    if (categoryResult.status === 'rejected') unavailable.push('categories');
+    if (accountResult.status === 'rejected') unavailable.push('accounts');
+    setReferenceDataError(unavailable.length
+      ? `Could not load ${unavailable.join(' and ')}. Retry to enable quick entry.`
+      : '');
+    setReferenceDataLoading(false);
+  }
+
   useEffect(() => {
     loadDashboard();
-    Promise.all([apiRequest('/categories'), apiRequest('/accounts')])
-      .then(([categoryList, accountList]) => {
-        setCategories(categoryList || []);
-        setAccounts((accountList || []).filter((account) => account.active));
-      })
-      .catch(() => { setCategories([]); setAccounts([]); });
-    const refreshListener = () => loadDashboard();
+    loadReferenceData();
+    const refreshListener = () => {
+      loadDashboard();
+      loadReferenceData();
+    };
     window.addEventListener('finsight:dashboard:refresh', refreshListener);
     return () => window.removeEventListener('finsight:dashboard:refresh', refreshListener);
   }, []);
@@ -84,6 +106,7 @@ export default function DashboardPage() {
         notes: ''
       });
       window.dispatchEvent(new Event('finsight:dashboard:refresh'));
+      setError('');
     } catch (addError) {
       setError(getUserErrorMessage(addError));
     } finally {
@@ -94,6 +117,9 @@ export default function DashboardPage() {
   const topCategories = useMemo(() => Object.entries(data.categorySpending || {}).slice(0, 5), [data.categorySpending]);
   const monthlyChartData = useMemo(() => Object.entries(data.monthlySpending || {}), [data.monthlySpending]);
   const totalSpend = Number(data.monthlyExpenses || 0);
+  const maxMonthlySpend = Math.max(...monthlyChartData.map(([, amount]) => Number(amount || 0)), 0);
+  const availableCategories = categories.filter((category) => category.type === transactionForm.type);
+  const canQuickEnter = !referenceDataLoading && !referenceDataError && availableCategories.length > 0 && accounts.length > 0;
 
   if (loading) {
     return <div className="loading-card">Loading your financial overview…</div>;
@@ -107,8 +133,8 @@ export default function DashboardPage() {
             <span>Current Balance</span>
             <Wallet size={18} />
           </div>
-          <strong>{formatCurrency(data.currentBalance)}</strong>
-          <small>Savings rate {formatPercent(data.savingsRate)}</small>
+          <strong>{formatCurrency(data.currentBalance, data.currency)}</strong>
+          <small>This month’s savings rate {formatPercent(data.savingsRate)}</small>
         </article>
 
         <article className="metric-card">
@@ -116,7 +142,7 @@ export default function DashboardPage() {
             <span>Total Income</span>
             <ArrowDownLeft size={18} />
           </div>
-          <strong>{formatCurrency(data.totalIncome)}</strong>
+          <strong>{formatCurrency(data.totalIncome, data.currency)}</strong>
           <small>All-time inflow</small>
         </article>
 
@@ -125,7 +151,7 @@ export default function DashboardPage() {
             <span>Total Expenses</span>
             <ArrowUpRight size={18} />
           </div>
-          <strong>{formatCurrency(data.totalExpenses)}</strong>
+          <strong>{formatCurrency(data.totalExpenses, data.currency)}</strong>
           <small>All-time outflow</small>
         </article>
 
@@ -134,8 +160,8 @@ export default function DashboardPage() {
             <span>This Month's Spending</span>
             <TrendingUp size={18} />
           </div>
-          <strong>{formatCurrency(data.monthlyExpenses)}</strong>
-          <small>Net cash flow {formatCurrency(data.netCashFlow)}</small>
+          <strong>{formatCurrency(data.monthlyExpenses, data.currency)}</strong>
+          <small>Net cash flow this month {formatCurrency(data.netCashFlow, data.currency)}</small>
         </article>
       </section>
 
@@ -158,18 +184,26 @@ export default function DashboardPage() {
             ) : (
               monthlyChartData.map(([label, value], index) => {
                 const numericValue = Number(value || 0);
-                const maxValue = Math.max(...monthlyChartData.map(([, amount]) => Number(amount || 0)), 1);
                 return (
                   <div key={`${label}-${index}`} className="chart-bar-wrap">
-                    <div className="chart-bar" style={{ height: `${Math.max(8, (numericValue / maxValue) * 100)}%` }} />
+                    <div
+                      className="chart-bar"
+                      role="img"
+                      aria-label={`${label}: ${formatCurrency(numericValue, data.currency)} spent`}
+                      title={`${label}: ${formatCurrency(numericValue, data.currency)}`}
+                      style={{ height: maxMonthlySpend === 0 ? '0%' : `${numericValue === 0 ? 0 : Math.max(2, (numericValue / maxMonthlySpend) * 100)}%` }}
+                    />
                   </div>
                 );
               })
             )}
           </div>
-          <div className="chart-labels">
-            {monthlyChartData.map(([label]) => (
-              <span key={label}>{label}</span>
+          <div className="chart-labels" aria-hidden="true">
+            {monthlyChartData.map(([label, value]) => (
+              <span key={label} title={`${label}: ${formatCurrency(value, data.currency)}`}>
+                <strong>{formatCompactCurrency(value, data.currency)}</strong>
+                <small>{label}</small>
+              </span>
             ))}
           </div>
         </div>
@@ -194,7 +228,7 @@ export default function DashboardPage() {
                   <div key={category} className="category-stat">
                     <div className="category-row-top">
                       <span>{category}</span>
-                      <strong>{formatCurrency(amount)}</strong>
+                      <strong>{formatCurrency(amount, data.currency)}</strong>
                     </div>
                     <div className="progress-track">
                       <div className="progress-fill" style={{ width: `${Math.min(100, percent)}%` }} />
@@ -237,7 +271,7 @@ export default function DashboardPage() {
                   </div>
                   <div className={`transaction-amount ${item.type === 'INCOME' ? 'income' : 'expense'}`}>
                     {item.type === 'INCOME' ? '+' : '-'}
-                    {formatCurrency(item.amount)}
+                    {formatCurrency(item.amount, data.currency)}
                   </div>
                 </div>
               ))}
@@ -278,6 +312,25 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {referenceDataError && (
+          <div className="error-panel" role="alert">
+            {referenceDataError}{' '}
+            <button type="button" className="secondary-button small" onClick={loadReferenceData}>
+              Retry
+            </button>
+          </div>
+        )}
+        {!referenceDataLoading && !referenceDataError && accounts.length === 0 && (
+          <div className="empty-card small">
+            <p>Create an active account before adding transactions. <Link to="/app/accounts">Manage accounts</Link></p>
+          </div>
+        )}
+        {!referenceDataLoading && !referenceDataError && availableCategories.length === 0 && (
+          <div className="empty-card small">
+            <p>Create a {transactionForm.type.toLowerCase()} category before adding this transaction. <Link to="/app/categories">Manage categories</Link></p>
+          </div>
+        )}
+
         <form className="transaction-form" onSubmit={handleAddTransaction}>
           <div className="form-grid">
             <label>
@@ -302,9 +355,9 @@ export default function DashboardPage() {
 
             <label>
               <span>Category</span>
-              <select value={transactionForm.category} onChange={(event) => setTransactionForm((prev) => ({ ...prev, category: event.target.value }))} required>
+              <select value={transactionForm.category} onChange={(event) => setTransactionForm((prev) => ({ ...prev, category: event.target.value }))} required disabled={!availableCategories.length}>
                 <option value="">Choose a category</option>
-                {categories.filter((category) => category.type === transactionForm.type).map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}
+                {availableCategories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}
               </select>
             </label>
 
@@ -321,7 +374,7 @@ export default function DashboardPage() {
 
           <label>
             <span>Account</span>
-            <select value={transactionForm.accountId} onChange={(event) => setTransactionForm((prev) => ({ ...prev, accountId: event.target.value }))}>
+            <select value={transactionForm.accountId} onChange={(event) => setTransactionForm((prev) => ({ ...prev, accountId: event.target.value }))} disabled={!accounts.length}>
               <option value="">Default account</option>
               {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
             </select>
@@ -343,8 +396,8 @@ export default function DashboardPage() {
           </label>
 
           <div className="inline-actions">
-            <button type="submit" className="primary-button" disabled={isSaving}>
-              {isSaving ? 'Saving...' : 'Add transaction'}
+            <button type="submit" className="primary-button" disabled={isSaving || !canQuickEnter}>
+              {isSaving ? 'Saving...' : referenceDataLoading ? 'Loading…' : 'Add transaction'}
             </button>
           </div>
         </form>

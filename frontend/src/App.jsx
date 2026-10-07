@@ -11,6 +11,7 @@ import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import TransactionsPage from './pages/TransactionsPage';
 import AccountsPage from './pages/AccountsPage';
+import PlanningPage from './pages/PlanningPage';
 import { getToken } from './services/api';
 
 function App() {
@@ -51,6 +52,7 @@ function App() {
           <Route path="budgets" element={<BudgetPage />} />
           <Route path="categories" element={<CategoriesPage />} />
           <Route path="insights" element={<InsightsPage />} />
+          <Route path="planning" element={<PlanningPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

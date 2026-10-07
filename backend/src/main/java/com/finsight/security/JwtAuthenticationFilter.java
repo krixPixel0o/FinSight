@@ -39,6 +39,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
+        // Keep malformed or oversized credentials from consuming parser work.
+        if (authorizationHeader.length() > 4096) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String token = authorizationHeader.substring(7);
 
         if (jwtUtil.validateToken(token)) {

@@ -1,6 +1,7 @@
 package com.finsight.service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -62,7 +63,11 @@ public class BudgetService {
         if (request.startDate() == null || request.endDate() == null) throw new IllegalArgumentException("Budget dates are required");
     }
     private BudgetResponse response(User user, Budget budget) {
-        BigDecimal spent = transactionRepository.sumExpenses(user.getId(), budget.getCategory(), budget.getStartDate(), budget.getEndDate());
+        LocalDate today = LocalDate.now();
+        LocalDate throughDate = budget.getEndDate().isBefore(today) ? budget.getEndDate() : today;
+        BigDecimal spent = budget.getStartDate().isAfter(today)
+                ? BigDecimal.ZERO
+                : transactionRepository.sumExpenses(user.getId(), budget.getCategory(), budget.getStartDate(), throughDate);
         return BudgetResponse.from(budget, spent == null ? BigDecimal.ZERO : spent);
     }
     private Budget owned(User user, Long id) { return budgetRepository.findById(id).filter(b -> b.getUser().getId().equals(user.getId())).orElseThrow(() -> new ResourceNotFoundException("Budget not found")); }
